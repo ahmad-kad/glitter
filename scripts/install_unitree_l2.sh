@@ -18,7 +18,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Configuration
 ROS_DISTRO="jazzy"
-LIDAR_IP="192.168.1.150"
+LIDAR_IP="192.168.1.62"
 LIDAR_REPO="https://github.com/unitreerobotics/unilidar_sdk_ros2.git"
 
 configure_network() {
@@ -42,7 +42,7 @@ configure_network() {
         type ethernet \
         con-name "l2-lidar" \
         ifname "$INTERFACE" \
-        ipv4.addresses "192.168.1.100/24" \
+        ipv4.addresses "192.168.1.2/24" \
         ipv4.method manual \
         ipv4.dns "8.8.8.8,8.8.4.4"
 
@@ -185,7 +185,7 @@ create_lidar_config() {
 # Adjust these parameters based on your setup
 
 lidar_ip: "$LIDAR_IP"
-local_ip: "192.168.1.100"
+local_ip: "192.168.1.2"
 port: 60001
 
 # ROS topic names
@@ -237,7 +237,7 @@ def generate_launch_description():
             name='l2_lidar_driver',
             parameters=[{
                 'lidar_ip': '$LIDAR_IP',
-                'local_ip': '192.168.1.100',
+                'local_ip': '192.168.1.2',
                 'port': 60001,
                 'frame_id': 'livox_frame'
             }],
