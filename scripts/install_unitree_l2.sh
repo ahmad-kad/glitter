@@ -19,7 +19,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 # Configuration
 ROS_DISTRO="jazzy"
 LIDAR_IP="192.168.1.62"
-LIDAR_REPO="https://github.com/unitreerobotics/unilidar_sdk_ros2.git"
+LIDAR_REPO="https://github.com/unitreerobotics/unilidar_sdk2.git"
 
 configure_network() {
     log_info "Configuring network for Unitree L2..."
@@ -100,9 +100,9 @@ install_driver() {
     cd ~/ros2_ws/src
 
     # Clone driver repository
-    if [[ -d "unilidar_sdk_ros2" ]]; then
+    if [[ -d "unilidar_sdk2" ]]; then
         log_info "Driver already cloned, updating..."
-        cd unilidar_sdk_ros2
+        cd unilidar_sdk2
         git pull
         cd ..
     else
@@ -112,12 +112,20 @@ install_driver() {
 
     # Install dependencies
     log_info "Installing driver dependencies..."
+
+    # Install required system packages for L2
+    sudo apt install -y \
+        ros-$ROS_DISTRO-rosidl-generator-dds-idl \
+        ros-$ROS_DISTRO-rmw-cyclonedds-cpp \
+        libyaml-cpp-dev \
+        libpcl-dev
+
     cd ~/ros2_ws
     rosdep install --from-paths src --ignore-src -r -y
 
     # Build driver
     log_info "Building L2 driver..."
-    colcon build --packages-select unilidar_sdk --event-handlers console_cooldown+ \
+    colcon build --packages-select unitree_lidar_ros2 --event-handlers console_cohesion+ --symlink-install \
         --cmake-args -DCMAKE_BUILD_TYPE=Release
 
     # Source workspace
@@ -135,24 +143,27 @@ test_driver() {
     source ~/ros2_ws/install/setup.bash
 
     # Launch driver in background
-    timeout 10s ros2 launch unilidar_sdk run.launch.py &
+    timeout 10s ros2 launch unitree_lidar_ros2 launch.py &
     LAUNCH_PID=$!
 
     # Wait a moment for launch
     sleep 3
 
     # Check if topics are available
-    if ros2 topic list | grep -q "livox/lidar"; then
-        log_success "L2 driver launched successfully"
+    local lidar_topics
+    lidar_topics=$(ros2 topic list | grep -E "(livox/lidar|pointcloud|unitree_lidar)" | head -1)
+
+    if [[ -n "$lidar_topics" ]]; then
+        log_success "L2 driver launched successfully - found topic: $lidar_topics"
 
         # Check topic frequency
         log_info "Testing data rate..."
-        timeout 5 ros2 topic hz /livox/lidar | grep -E "average rate|min:|max:" || \
+        timeout 5 ros2 topic hz "$lidar_topics" | grep -E "average rate|min:|max:" || \
             log_warning "Could not measure topic frequency"
 
         # Get a sample message
         log_info "Getting sample point cloud..."
-        timeout 3 ros2 topic echo /livox/lidar --once --no-arr > /dev/null && \
+        timeout 3 ros2 topic echo "$lidar_topics" --once --no-arr > /dev/null && \
             log_success "Point cloud data received" || \
             log_warning "No point cloud data received (may be normal)"
 
@@ -167,7 +178,7 @@ test_driver() {
         log_warning "Troubleshooting steps:"
         log_warning "1. Check network connectivity to L2"
         log_warning "2. Verify ROS 2 environment is sourced"
-        log_warning "3. Check driver build logs: cd ~/ros2_ws && colcon build --packages-select unilidar_sdk"
+        log_warning "3. Check driver build logs: cd ~/ros2_ws && colcon build --packages-select unitree_lidar_ros2"
         log_warning "4. Verify L2 firmware version is compatible"
 
         exit 1
@@ -232,8 +243,8 @@ def generate_launch_description():
     return LaunchDescription([
         # L2 LiDAR driver
         Node(
-            package='unilidar_sdk',
-            executable='unilidar_sdk_node',
+            package='unitree_lidar_ros2',
+            executable='unitree_lidar_ros2_node',
             name='l2_lidar_driver',
             parameters=[{
                 'lidar_ip': '$LIDAR_IP',
@@ -341,7 +352,7 @@ main() {
     echo ""
     echo "Quick start:"
     echo "  cd ~/ros2_ws && source install/setup.bash"
-    echo "  ros2 launch unilidar_sdk run.launch.py"
+    echo "  ros2 launch unitree_lidar_ros2 launch.py"
     echo ""
     echo "Test fusion:"
     echo "  cd ~/glitter && python3 src/core/fusion.py"
