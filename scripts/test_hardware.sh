@@ -11,6 +11,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Configuration
+ROS_DISTRO="jazzy"
+
 # Test results
 TESTS_RUN=0
 TESTS_PASSED=0
@@ -206,8 +209,8 @@ test_lidar_hardware() {
 
 test_ros_topics() {
     # Source ROS if available
-    if [[ -f "/opt/ros/humble/setup.bash" ]]; then
-        source /opt/ros/humble/setup.bash 2>/dev/null || true
+    if [[ -f "/opt/ros/$ROS_DISTRO/setup.bash" ]]; then
+        source /opt/ros/$ROS_DISTRO/setup.bash 2>/dev/null || true
     fi
 
     if [[ -f "~/ros2_ws/install/setup.bash" ]]; then

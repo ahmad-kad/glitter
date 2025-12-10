@@ -11,6 +11,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Configuration
+ROS_DISTRO="jazzy"
+
 log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
@@ -106,7 +109,7 @@ install_usb_camera() {
     sudo apt update
     sudo apt install -y \
         v4l-utils \
-        ros-humble-usb-cam \
+        ros-$ROS_DISTRO-usb-cam \
         guvcview || log_warning "guvcview not available"
 
     # List available cameras
@@ -138,7 +141,7 @@ test_ros_camera_bridge() {
     fi
 
     # Source ROS
-    source /opt/ros/humble/setup.bash 2>/dev/null || true
+    source /opt/ros/$ROS_DISTRO/setup.bash 2>/dev/null || true
 
     # Test image transport
     python3 -c "

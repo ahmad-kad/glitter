@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 PROJECT_NAME="glitter"
-ROS_DISTRO="humble"
+ROS_DISTRO="jazzy"
 UBUNTU_VERSION="24.04"
 
 # Functions

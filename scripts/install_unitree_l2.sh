@@ -17,7 +17,7 @@ log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Configuration
-ROS_DISTRO="humble"
+ROS_DISTRO="jazzy"
 LIDAR_IP="192.168.1.150"
 LIDAR_REPO="https://github.com/unitreerobotics/unilidar_sdk_ros2.git"
 
