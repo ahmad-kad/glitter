@@ -11,7 +11,15 @@ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from std_msgs.msg import Float64
 from geometry_msgs.msg import TransformStamped
 import tf2_ros
-from utils import TransformUtils, PointCloudUtils, ColorUtils, LoggingUtils, CameraUtils, L2_DEFAULT_TOPIC, HAS_ROS_NUMPY
+from utils import (
+    TransformUtils,
+    PointCloudUtils,
+    ColorUtils,
+    LoggingUtils,
+    CameraUtils,
+    L2_DEFAULT_TOPIC,
+    HAS_ROS_NUMPY
+)
 
 # Constants
 FIELDS = [
@@ -41,6 +49,9 @@ class LidarCameraFusion(Node):
             self.declare_parameter('extrinsic_trans', [0.0, 0.0, 0.0])
             self.declare_parameter('extrinsic_rot', [0.0, 0.0, 0.0])
             self.declare_parameter('lidar_topic', L2_DEFAULT_TOPIC)
+            self.declare_parameter('geometric_prioritization', False)  # Enable edge/corner prioritization
+            self.declare_parameter('max_points_per_frame', None)  # Limit points per frame
+            self.declare_parameter('geometric_weight', 0.7)  # Weight for geometric features
         except Exception as e:
             self.logger.error(f"Failed to declare parameters: {e}")
             raise
@@ -179,6 +190,32 @@ class LidarCameraFusion(Node):
 
         if len(points_cam) == 0:
             return
+
+        # Optional geometric prioritization (prioritize edges/corners)
+        geom_start = time.time()
+        try:
+            geometric_prioritization = self.get_parameter('geometric_prioritization').get_parameter_value().bool_value
+            if geometric_prioritization:
+                max_points = self.get_parameter('max_points_per_frame').get_parameter_value().integer_value
+                geometric_weight = self.get_parameter('geometric_weight').get_parameter_value().double_value
+
+                # Apply geometric prioritization to select most valuable points
+                points_3d = TransformUtils.prioritize_points_by_geometry(
+                    points_3d, cv_image, K, RT,
+                    max_points=max_points if max_points > 0 else None,
+                    geometric_weight=geometric_weight
+                )
+
+                # Re-project selected points to camera coordinates
+                points_hom_selected = PointCloudUtils.to_homogeneous(points_3d)
+                points_cam = (RT @ points_hom_selected.T).T
+
+                self.logger.debug(f"Geometric prioritization: selected {len(points_3d)} high-value points")
+
+        except Exception as e:
+            self.logger.warning(f"Geometric prioritization failed, using all points: {e}")
+
+        timing['geometric_prioritization'] = time.time() - geom_start
 
         # Time 2D projection
         proj_start = time.time()

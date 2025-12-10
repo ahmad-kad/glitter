@@ -12,6 +12,7 @@ import numbers
 LIDAR_MIN_DEPTH = 0.1
 LIDAR_MAX_DEPTH = 50.0
 DOWNSAMPLE_STEP = 5
+DOWNSAMPLE_FREQUENCY = 10  # Downsample every 10 frames by default
 IMAGE_BOUNDS_EPSILON = 1e-8
 CALIBRATION_TRACKBAR_RANGE = 100
 CALIBRATION_TRACKBAR_OFFSET = 50
@@ -28,6 +29,15 @@ PI_CAMERA_V3_WIDTH = 1280
 PI_CAMERA_V3_HEIGHT = 720
 PI_CAMERA_V3_FX_FACTOR = 0.85
 PI_CAMERA_V3_FY_FACTOR = 0.85
+
+# Edge/Corner detection constants (for geometric feature prioritization)
+EDGE_DETECTOR_CANNY_LOW = 50
+EDGE_DETECTOR_CANNY_HIGH = 150
+EDGE_DETECTOR_BLUR_SIZE = 3
+CORNER_DETECTOR_BLOCK_SIZE = 2
+CORNER_DETECTOR_K_SIZE = 3
+CORNER_DETECTOR_K = 0.04
+EDGE_PRIORITY_RADIUS = 5  # pixels around edges/corners to prioritize
 
 try:
     import ros_numpy
@@ -296,6 +306,109 @@ class TransformUtils:
         # Convert to pixel coordinates with proper division (avoid division by zero)
         z_coords = uv_hom[:, 2]
         valid_z = np.abs(z_coords) > 1e-8  # Slightly more tolerant threshold
+
+    @staticmethod
+    def apply_geometric_prioritization(points_3d: np.ndarray,
+                                     image: np.ndarray,
+                                     K: np.ndarray,
+                                     extrinsic: np.ndarray,
+                                     priority_threshold: float = 1.5) -> Tuple[np.ndarray, np.ndarray]:
+        """Apply geometric prioritization to filter/select points near edges/corners.
+
+        Args:
+            points_3d: Nx3 array of 3D points
+            image: Camera image for geometric feature detection
+            K: Camera intrinsic matrix
+            extrinsic: Camera extrinsic matrix
+            priority_threshold: Minimum priority value to keep points
+
+        Returns:
+            Tuple of (filtered_points, priority_values)
+        """
+        # Project points to image plane
+        u, v = TransformUtils.project_3d_to_2d(points_3d, K, extrinsic)
+
+        # Get image dimensions
+        height, width = image.shape[:2]
+
+        # Filter points within image bounds
+        valid_bounds = ((u >= 0) & (u < width) & (v >= 0) & (v < height))
+        u_valid = u[valid_bounds].astype(int)
+        v_valid = v[valid_bounds].astype(int)
+        points_valid = points_3d[valid_bounds]
+
+        if len(points_valid) == 0:
+            return points_3d, np.ones(len(points_3d))
+
+        # Create geometric priority mask
+        priority_mask = CameraUtils.create_geometric_priority_mask(image)
+
+        # Get priority values for projected points
+        priority_values = priority_mask[v_valid, u_valid]
+
+        # Filter points based on priority threshold
+        high_priority_mask = priority_values >= priority_threshold
+
+        if high_priority_mask.sum() > 0:
+            # Return only high-priority points
+            filtered_points = points_valid[high_priority_mask]
+            filtered_priorities = priority_values[high_priority_mask]
+        else:
+            # Fallback: return all points if no high-priority points found
+            filtered_points = points_valid
+            filtered_priorities = priority_values
+
+        return filtered_points, filtered_priorities
+
+    @staticmethod
+    def prioritize_points_by_geometry(points_3d: np.ndarray,
+                                    image: np.ndarray,
+                                    K: np.ndarray,
+                                    extrinsic: np.ndarray,
+                                    max_points: Optional[int] = None,
+                                    geometric_weight: float = 0.7) -> np.ndarray:
+        """Prioritize and select points based on geometric features.
+
+        Args:
+            points_3d: Nx3 array of 3D points
+            image: Camera image for geometric feature detection
+            K: Camera intrinsic matrix
+            extrinsic: Camera extrinsic matrix
+            max_points: Maximum number of points to return (None = no limit)
+            geometric_weight: Weight for geometric prioritization (0-1)
+
+        Returns:
+            Filtered and prioritized 3D points
+        """
+        if len(points_3d) == 0:
+            return points_3d
+
+        # Get geometric priorities
+        _, priorities = TransformUtils.apply_geometric_prioritization(
+            points_3d, image, K, extrinsic, priority_threshold=1.0
+        )
+
+        # If we don't have priorities for all points, create fallback
+        if len(priorities) != len(points_3d):
+            priorities = np.ones(len(points_3d))
+
+        # Compute combined score (geometric priority + distance weighting)
+        distances = np.linalg.norm(points_3d, axis=1)
+        distance_weight = 1.0 / (1.0 + distances * 0.1)  # Closer points get higher weight
+
+        combined_scores = (geometric_weight * priorities +
+                          (1 - geometric_weight) * distance_weight)
+
+        # Sort by combined score (descending)
+        sort_indices = np.argsort(combined_scores)[::-1]
+
+        # Select top points
+        if max_points is not None and max_points < len(points_3d):
+            selected_indices = sort_indices[:max_points]
+        else:
+            selected_indices = sort_indices
+
+        return points_3d[selected_indices]
         u = np.zeros(len(z_coords), dtype=np.int32)
         v = np.zeros(len(z_coords), dtype=np.int32)
         u[valid_z] = (uv_hom[valid_z, 0] / z_coords[valid_z]).astype(np.int32)
@@ -622,3 +735,110 @@ class CameraUtils:
         cy = height / 2.0
 
         return CameraUtils.create_intrinsic_matrix(fx, fy, cx, cy)
+
+    @staticmethod
+    def detect_edges(image: np.ndarray,
+                    canny_low: int = EDGE_DETECTOR_CANNY_LOW,
+                    canny_high: int = EDGE_DETECTOR_CANNY_HIGH,
+                    blur_size: int = EDGE_DETECTOR_BLUR_SIZE) -> np.ndarray:
+        """Detect edges in image using Canny edge detection.
+
+        Args:
+            image: Input image (grayscale or BGR)
+            canny_low: Lower threshold for Canny
+            canny_high: Upper threshold for Canny
+            blur_size: Gaussian blur kernel size
+
+        Returns:
+            Binary edge mask (255 where edges detected)
+        """
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image.copy()
+
+        # Apply Gaussian blur to reduce noise
+        blurred = cv2.GaussianBlur(gray, (blur_size, blur_size), 0)
+
+        # Apply Canny edge detection
+        edges = cv2.Canny(blurred, canny_low, canny_high)
+
+        return edges
+
+    @staticmethod
+    def detect_corners(image: np.ndarray,
+                      block_size: int = CORNER_DETECTOR_BLOCK_SIZE,
+                      k_size: int = CORNER_DETECTOR_K_SIZE,
+                      k: float = CORNER_DETECTOR_K) -> Tuple[np.ndarray, np.ndarray]:
+        """Detect corners in image using Harris corner detection.
+
+        Args:
+            image: Input image (grayscale or BGR)
+            block_size: Neighborhood size for corner detection
+            k_size: Aperture parameter for Sobel operator
+            k: Harris detector free parameter
+
+        Returns:
+            Tuple of (corner_response, corner_mask)
+        """
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image.copy()
+
+        # Convert to float32 for Harris detection
+        gray = np.float32(gray)
+
+        # Apply Harris corner detection
+        dst = cv2.cornerHarris(gray, block_size, k_size, k)
+
+        # Dilate to mark corners
+        dst = cv2.dilate(dst, None)
+
+        # Threshold for corner detection
+        corner_mask = dst > 0.01 * dst.max()
+
+        return dst, corner_mask
+
+    @staticmethod
+    def create_geometric_priority_mask(image: np.ndarray,
+                                     edge_weight: float = 2.0,
+                                     corner_weight: float = 3.0,
+                                     radius: int = EDGE_PRIORITY_RADIUS) -> np.ndarray:
+        """Create priority mask for geometric features (edges/corners).
+
+        Args:
+            image: Input image
+            edge_weight: Multiplier for edge regions
+            corner_weight: Multiplier for corner regions
+            radius: Influence radius around features
+
+        Returns:
+            Priority mask where geometric features have higher values
+        """
+        height, width = image.shape[:2]
+
+        # Initialize priority mask with base weight of 1.0
+        priority_mask = np.ones((height, width), dtype=np.float32)
+
+        # Detect edges
+        edges = CameraUtils.detect_edges(image)
+
+        # Detect corners
+        _, corner_mask = CameraUtils.detect_corners(image)
+
+        # Apply edge priority
+        if edges.max() > 0:
+            # Dilate edges to create influence region
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (radius*2+1, radius*2+1))
+            edge_influence = cv2.dilate(edges, kernel, iterations=1)
+            priority_mask[edge_influence > 0] *= edge_weight
+
+        # Apply corner priority (higher weight)
+        if corner_mask.max() > 0:
+            # Dilate corners to create influence region
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (radius*2+1, radius*2+1))
+            corner_influence = cv2.dilate(corner_mask.astype(np.uint8), kernel, iterations=1)
+            priority_mask[corner_influence > 0] *= corner_weight
+
+        return priority_mask
