@@ -1,0 +1,28 @@
+# Core dependencies for LiDAR-Camera Fusion
+numpy>=1.24.0
+opencv-python>=4.8.0
+scipy>=1.11.0
+transforms3d>=0.4.1
+
+# Performance monitoring and utilities
+psutil>=5.9.0
+tqdm>=4.66.0
+
+# Compression libraries
+lz4>=4.3.0
+laspy[lazrs]>=2.5.0
+
+# Optional: For advanced filtering (install if needed)
+# scikit-learn>=1.3.0  # For ML-based artifact filtering
+# onnxruntime>=1.15.0  # For ONNX model inference
+
+# ROS 2 packages (installed via apt, listed for reference)
+# ros-jazzy-ros-base
+# ros-jazzy-sensor-msgs
+# ros-jazzy-sensor-msgs-py
+# ros-jazzy-cv-bridge
+# ros-jazzy-tf2-ros
+# ros-jazzy-message-filters
+# ros-jazzy-diagnostic-msgs
+# ros-jazzy-image-transport
+# ros-jazzy-usb-cam
