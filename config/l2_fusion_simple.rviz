@@ -1,0 +1,56 @@
+panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded: true
+      Splitter Ratio: 0.5
+  - Class: rviz_common/Views
+    Name: Views
+    Property Tree Widget:
+      Expanded: true
+      Splitter Ratio: 0.5
+
+visualization_manager:
+  Class: ""
+  Displays:
+    - Alpha: 1.0
+      Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Value: true
+    - Alpha: 0.8
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: Intensity
+      Decay Time: 100.0
+      Enabled: true
+      Name: LiDAR_PointCloud
+      Queue Size: 3
+      Selectable: true
+      Size (Pixels): 5
+      Size (m): 0.01
+      Style: Points
+      Topic: /unilidar/cloud
+      Unreliable: false
+      Use Fixed Frame: false
+      Value: Points
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: unilidar_lidar
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+  Value: true
+  Views:
+    Class: ""
+    Displays:
+    - Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Value: Orbit (rviz)
+      Yaw: 0.0
+      Pitch: 0.0
+      Distance: 10.0
+      Focal Point: [0, 0, 0]
+
