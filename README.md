@@ -50,7 +50,7 @@ ros2 launch unilidar_sdk run.launch.py
 python3 src/core/fusion.py
 
 # Or use simplified infrastructure
-python3 src/infrastructure/simple_fusion_node.py
+python3 src/core/simple_fusion_node.py
 
 # Visualize (see docs/rviz_guide.md for detailed instructions)
 ros2 run rviz2 rviz2 -d config/l2_fusion.rviz
@@ -100,40 +100,61 @@ glitter/
 │       └── visualize_with_open3d.py  # Open3D visualization
 │
 ├── src/                               # Source code
-│   ├── core/                         # Core fusion logic
-│   │   ├── fusion.py                 # Main fusion node
-│   │   ├── calibration.py            # Calibration tools
-│   │   └── map.py                    # Mapping functionality
+│   ├── camera/                     # Camera-specific modules
+│   │   └── pi_camera_node.py       # Raspberry Pi camera node
 │   │
-│   ├── infrastructure/               # Real-time infrastructure
-│   │   ├── infrastructure.py         # Simplified infrastructure
-│   │   ├── memory_pool.py            # Memory management
-│   │   ├── async_pipeline.py         # Async I/O
-│   │   └── rolling_buffer.py         # Temporal sync
+│   ├── core/                       # Core fusion logic
+│   │   ├── fusion.py               # Main fusion node
+│   │   ├── simple_fusion_node.py   # Simplified fusion node
+│   │   ├── calibration.py          # Calibration tools
+│   │   └── map.py                  # Mapping functionality
 │   │
-│   └── utils/                        # Utilities
-│       ├── utils.py                  # Core utilities
-│       └── simulator.py              # Synthetic testing
+│   ├── infrastructure/             # Real-time infrastructure
+│   │   ├── infrastructure.py       # Simplified infrastructure
+│   │   ├── moving_sensor_handler.py # Vehicle-mounted sensor handler
+│   │   ├── memory_pool.py          # Memory management
+│   │   ├── async_pipeline.py       # Async I/O
+│   │   ├── rolling_buffer.py       # Temporal sync
+│   │   └── test_infrastructure.py  # Infrastructure tests
+│   │
+│   └── utils/                      # Utilities
+│       ├── utils.py                # Core utilities
+│       └── simulator.py            # Synthetic testing
 │
-├── tests/                            # Test suite
-│   ├── test_system.py               # System validation
-│   ├── test_infrastructure.py       # Infrastructure tests
-│   └── hardware_tests/              # Hardware-specific tests
-│       ├── test_camera.py           # Camera validation
-│       ├── test_lidar.py            # LiDAR validation
-│       └── test_integration.py      # Full system tests
+├── tests/                          # Test suite
+│   ├── test_system.py             # System validation
+│   ├── hardware_tests/            # Hardware-specific tests
+│   │   ├── test_camera.py         # Camera validation
+│   │   ├── test_lidar.py          # LiDAR validation
+│   │   ├── test_integration.py    # Full system tests
+│   │   └── visual_camera_test.py  # Camera visualization test
 │
-├── config/                          # Configuration files
-│   ├── l2_fusion.rviz              # RViz visualization
-│   ├── l2_fusion_simple.rviz       # Simple RViz config
-│   ├── camera_calibration.yaml     # Camera parameters
-│   └── lidar_config.yaml           # LiDAR parameters
+├── scripts/                        # Scripts and utilities
+│   ├── setup_ubuntu_24.sh         # Ubuntu + ROS setup
+│   ├── install_camera_drivers.sh  # Camera installation
+│   ├── install_unitree_l2.sh      # LiDAR setup
+│   ├── test_hardware.sh           # Hardware validation
+│   ├── activate_env.sh            # Environment activation
+│   ├── setup_env.sh               # Environment setup
+│   └── utilities/                 # Utility scripts
+│       ├── launch_lidar_rviz.sh   # Launch LiDAR + RViz
+│       ├── build_lidar_driver.sh  # Build LiDAR driver
+│       ├── verify_pointcloud.sh   # Verify point cloud
+│       └── accumulate_pointcloud.py # Point cloud accumulator
 │
-└── docs/                            # Documentation
-    ├── project_guide.md            # Technical documentation
-    ├── REAL_WORLD_ROADMAP.md       # Feature roadmap
-    ├── rviz_guide.md               # RViz visualization guide
-    └── troubleshooting.md          # Troubleshooting guide
+├── config/                        # Configuration files
+│   ├── l2_fusion.rviz            # RViz visualization
+│   ├── l2_fusion_simple.rviz     # Simple RViz config
+│   └── camera_calibration.yaml   # Camera parameters (future)
+│
+└── docs/                          # Documentation
+    ├── project_guide.md          # Technical documentation
+    ├── REAL_WORLD_ROADMAP.md     # Feature roadmap
+    ├── rviz_guide.md             # RViz visualization guide
+    ├── troubleshooting.md        # Troubleshooting guide
+    ├── camera_troubleshooting.md # Camera-specific troubleshooting
+    ├── pi_camera_setup.md        # Pi Camera setup guide
+    └── quick_start.md            # Quick start guide
 ```
 
 ## Testing Strategy
