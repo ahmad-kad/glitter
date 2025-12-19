@@ -14,7 +14,7 @@
 
 ## System Requirements
 - **OS**: Ubuntu 24.04 LTS Server (64-bit ARM)
-- **ROS**: ROS 2 Humble Hawksbill
+- **ROS**: ROS 2 Jazzy Jalisco
 - **Python**: 3.10+
 - **Memory**: 4GB+ available RAM
 - **Storage**: 32GB+ free space
@@ -59,7 +59,7 @@ sudo reboot
 
 ---
 
-## Step 2: ROS 2 Humble Installation
+## Step 2: ROS 2 Jazzy Installation
 
 ```bash
 # Set locale
@@ -80,21 +80,21 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-a
   http://packages.ros.org/ros2/ubuntu $(source /etc/os-release && echo $UBUNTU_CODENAME) main" | \
   sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
 
-# Install ROS 2 Humble
+# Install ROS 2 Jazzy
 sudo apt update
-sudo apt install -y ros-humble-ros-base ros-dev-tools
+sudo apt install -y ros-jazzy-ros-base ros-dev-tools
 
 # Install additional ROS packages
 sudo apt install -y \
-  ros-humble-sensor-msgs \
-  ros-humble-sensor-msgs-py \
-  ros-humble-cv-bridge \
-  ros-humble-tf2-ros \
-  ros-humble-message-filters \
-  ros-humble-diagnostic-msgs \
-  ros-humble-image-transport \
-  ros-humble-image-transport-plugins \
-  ros-humble-usb-cam \
+  ros-jazzy-sensor-msgs \
+  ros-jazzy-sensor-msgs-py \
+  ros-jazzy-cv-bridge \
+  ros-jazzy-tf2-ros \
+  ros-jazzy-message-filters \
+  ros-jazzy-diagnostic-msgs \
+  ros-jazzy-image-transport \
+  ros-jazzy-image-transport-plugins \
+  ros-jazzy-usb-cam \
   python3-rosdep \
   python3-colcon-common-extensions
 
@@ -103,7 +103,7 @@ sudo rosdep init
 rosdep update
 
 # Source ROS 2
-echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -131,7 +131,7 @@ libcamera-hello --list-cameras
 libcamera-jpeg -o test.jpg
 
 # Install ROS 2 camera bridge
-sudo apt install -y ros-humble-image-transport ros-humble-image-transport-plugins
+sudo apt install -y ros-jazzy-image-transport ros-jazzy-image-transport-plugins
 pip3 install --break-system-packages rpi-lgpio
 ```
 
@@ -170,7 +170,7 @@ sudo apt install -y v4l-utils
 v4l2-ctl --list-devices
 
 # Install ROS 2 USB camera node
-sudo apt install -y ros-humble-usb-cam
+sudo apt install -y ros-jazzy-usb-cam
 
 # Test camera capture
 ros2 run usb_cam usb_cam_node
@@ -184,7 +184,7 @@ ros2 run usb_cam usb_cam_node
 
 1. **Connect L2 to Raspberry Pi via Ethernet**
    - Connect Ethernet cable from L2 to Pi Ethernet port
-   - L2 uses static IP: `192.168.1.150` (default)
+   - L2 uses static IP: `192.168.1.62` or `192.168.1.150` (default, depends on model)
 
 2. **Configure Network**
 
@@ -201,50 +201,111 @@ sudo nmcli connection add \
 sudo nmcli connection down "Wired connection 1"
 sudo nmcli connection up "l2-lidar"
 
-# Test connectivity
+# Test connectivity (try both common IPs)
+ping 192.168.1.62
 ping 192.168.1.150
 ```
 
 ### Install Unitree L2 Driver
+
+**Option 1: Automated Installation (Recommended)**
+
+```bash
+cd ~/glitter
+chmod +x scripts/install_unitree_l2.sh
+./scripts/install_unitree_l2.sh
+```
+
+**Option 2: Manual Installation**
 
 ```bash
 # Create ROS 2 workspace
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 
-# Clone Unitree L2 ROS 2 driver
+# Clone Unitree L2 ROS 2 driver (check for correct repository)
 git clone https://github.com/unitreerobotics/unilidar_sdk_ros2.git
+# Or if using unilidar_sdk2:
+# git clone https://github.com/unitreerobotics/unilidar_sdk2.git
 
 # Install dependencies
+sudo apt update
+sudo apt install -y \
+    ros-jazzy-pcl-conversions \
+    ros-jazzy-pcl-ros \
+    libpcl-dev \
+    libyaml-cpp-dev \
+    ros-jazzy-rosidl-generator-dds-idl \
+    ros-jazzy-rmw-cyclonedds-cpp
+
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
 
-# Build driver
-colcon build --packages-select unilidar_sdk --event-handlers console_cooldown+ \
-  --cmake-args -DCMAKE_BUILD_TYPE=Release
+# Build driver (package name may vary: unitree_lidar_ros2 or unilidar_sdk)
+colcon build --packages-select unitree_lidar_ros2 --cmake-args -DCMAKE_BUILD_TYPE=Release
 
 # Source workspace
 echo "source ~/ros2_ws/install/setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### Test LiDAR
+### Launch LiDAR and Visualize
+
+**Quick Start:**
 
 ```bash
-# Launch L2 driver
-ros2 launch unilidar_sdk run.launch.py
-
-# In another terminal, check topics
-ros2 topic list
-# Should show: /livox/lidar
-
-# Echo point cloud
-ros2 topic echo /livox/lidar --once
-
-# Check frequency
-ros2 topic hz /livox/lidar
-# Should show ~10 Hz
+cd ~/glitter
+./scripts/utilities/launch_lidar_rviz.sh
 ```
+
+**Manual Launch:**
+
+**Terminal 1 - LiDAR Driver:**
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/ros2_ws/install/setup.bash
+ros2 launch unitree_lidar_ros2 launch.py
+```
+
+**Terminal 2 - RViz:**
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/ros2_ws/install/setup.bash
+rviz2 -d ~/glitter/config/l2_fusion.rviz
+```
+
+### Verify LiDAR is Working
+
+```bash
+# Check topics
+ros2 topic list
+# Should show: /unilidar/cloud (or /livox/lidar depending on driver)
+
+# Check point cloud data
+ros2 topic echo /unilidar/cloud --once
+
+# Check data rate
+ros2 topic hz /unilidar/cloud
+# Expected: ~10-20 Hz depending on LiDAR configuration
+
+# Verify point cloud structure
+python3 scripts/utilities/test_pointcloud_viewer.py
+```
+
+### RViz Configuration
+
+The RViz config (`config/l2_fusion.rviz`) is configured to show:
+- **Raw_L2_LiDAR**: Point cloud from `/unilidar/cloud` with intensity coloring
+- **Grid**: Reference grid for visualization
+- **TF_Frames**: Coordinate frame visualization
+
+**If Point Cloud Not Visible:**
+1. **Enable Display**: **Displays** → **Raw_L2_LiDAR** → **✓ Check Enabled**
+2. **Verify Topic**: Should be `/unilidar/cloud`
+3. **Set Fixed Frame**: **Global Options** → **Fixed Frame** → `unilidar_lidar`
+4. **Increase Point Size**: **Size (Pixels)** → `5` or `10`
+
+See [RViz Guide](docs/rviz_guide.md) for detailed visualization instructions.
 
 ---
 
@@ -327,7 +388,7 @@ sudo chmod +x /usr/local/bin/validate_hardware.sh
 
 ## Compatibility Matrix
 
-| Component | Ubuntu 24.04 | ROS 2 Humble | Raspberry Pi 5 | Status |
+| Component | Ubuntu 24.04 | ROS 2 Jazzy | Raspberry Pi 5 | Status |
 |-----------|--------------|--------------|----------------|--------|
 | **Raspberry Pi Camera v3** | ✅ Full | ✅ via picamera2 | ✅ Native | Recommended |
 | **Pi Global Shutter Camera** | ✅ Full | ✅ via picamera2 | ✅ Native | Production Ready |

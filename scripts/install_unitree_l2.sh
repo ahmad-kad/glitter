@@ -1,6 +1,6 @@
 #!/bin/bash
 # Unitree L2 LiDAR Installation Script
-# Compatible with Ubuntu 24.04 LTS and ROS 2 Humble
+# Compatible with Ubuntu 24.04 LTS and ROS 2 Jazzy
 
 set -e
 

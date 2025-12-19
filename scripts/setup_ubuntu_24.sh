@@ -93,7 +93,7 @@ main() {
     log_info "Setting timezone..."
     sudo timedatectl set-timezone UTC  # Or your preferred timezone
 
-    # Install ROS 2 Humble
+    # Install ROS 2 Jazzy
     install_ros2
 
     # Install camera support

@@ -31,7 +31,7 @@ This project fuses 3D LiDAR point clouds with 2D camera images to create colored
 ### Supported Hardware
 - **LiDAR**: Unitree L2 4D (primary) or L1 (fallback)
 - **Camera**: Raspberry Pi Camera v3 (primary) or USB cameras
-- **Platform**: Raspberry Pi 5 with Ubuntu 24.04 + ROS 2 Humble
+- **Platform**: Raspberry Pi 5 with Ubuntu 24.04 + ROS 2 Jazzy
 
 ### Connection Setup
 1. Connect LiDAR to USB/Ethernet port
@@ -138,7 +138,7 @@ python3 test_system.py  # Includes simulator test
 
 ### **Software Requirements**
 - Ubuntu Server 24.04 LTS (64-bit) for Raspberry Pi 5
-- ROS 2 Humble Hawksbill
+- ROS 2 Jazzy Jalisco
 - Python 3.10+
 
 ---
@@ -169,7 +169,7 @@ sudo update-locale LANG=en_US.UTF-8
 sudo timedatectl set-timezone America/New_York
 ```
 
-### **Step 2: ROS 2 Humble Installation**
+### **Step 2: ROS 2 Jazzy Installation**
 
 #### **Add ROS 2 Repository**
 ```bash
@@ -181,10 +181,10 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-a
 sudo apt update
 ```
 
-#### **Install ROS 2 Humble Desktop**
+#### **Install ROS 2 Jazzy Desktop**
 ```bash
-# Install ROS 2 Humble desktop (includes tools)
-sudo apt install -y ros-humble-desktop
+# Install ROS 2 Jazzy desktop (includes tools)
+sudo apt install -y ros-jazzy-desktop
 
 # Install ROS development tools
 sudo apt install -y python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential
@@ -197,7 +197,7 @@ rosdep update
 #### **Setup ROS Environment**
 ```bash
 # Add to .bashrc for automatic sourcing
-echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc  # Optional: set domain ID for multi-robot
 source ~/.bashrc
 ```
@@ -219,7 +219,7 @@ cd ~/glitter_ws/src
 sudo apt install -y python3-opencv python3-numpy python3-open3d
 
 # Install ROS Python packages
-sudo apt install -y ros-humble-sensor-msgs-py ros-humble-cv-bridge ros-humble-tf2-ros ros-humble-message-filters
+sudo apt install -y ros-jazzy-sensor-msgs-py ros-jazzy-cv-bridge ros-jazzy-tf2-ros ros-jazzy-message-filters
 
 # Install optional performance libraries
 pip3 install scipy ros-numpy tqdm --break-system-packages
@@ -286,26 +286,26 @@ echo "🔧 Installing essential tools..."
 sudo apt install -y curl wget git htop neofetch vim nano python3-pip python3-dev build-essential
 
 # ROS 2 Installation
-echo "🤖 Installing ROS 2 Humble..."
+echo "🤖 Installing ROS 2 Jazzy..."
 sudo curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key -o /usr/share/keyrings/ros-archive-keyring.gpg
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] http://packages.ros.org/ros2/ubuntu $(source /etc/os-release && echo $UBUNTU_CODENAME) main" | sudo tee /etc/apt/sources.list.d/ros2.list > /dev/null
 
 sudo apt update
-sudo apt install -y ros-humble-desktop python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential
+sudo apt install -y ros-jazzy-desktop python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential
 
 sudo rosdep init
 rosdep update
 
 # Setup ROS environment
 echo "⚙️ Configuring ROS environment..."
-echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc
 echo "export ROS_DOMAIN_ID=42" >> ~/.bashrc
 source ~/.bashrc
 
 # Install project dependencies
 echo "📚 Installing project dependencies..."
 sudo apt install -y python3-opencv python3-numpy python3-open3d
-sudo apt install -y ros-humble-sensor-msgs-py ros-humble-cv-bridge ros-humble-tf2-ros ros-humble-message-filters
+sudo apt install -y ros-jazzy-sensor-msgs-py ros-jazzy-cv-bridge ros-jazzy-tf2-ros ros-jazzy-message-filters
 
 # Optional performance libraries
 pip3 install scipy ros-numpy --break-system-packages
@@ -354,7 +354,7 @@ chmod +x start.sh
 ### **Test 1: System Health Check**
 ```bash
 # Check ROS installation
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 ros2 --version
 
 # Check Python packages
@@ -367,7 +367,7 @@ python3 -c "import scipy, ros_numpy; print('✓ Performance packages working')" 
 ### **Test 2: Camera System Test**
 ```bash
 # Test USB camera
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 
 # Start camera node
 ros2 run v4l2_camera v4l2_camera_node
@@ -380,7 +380,7 @@ ros2 topic echo /camera/image_raw --once
 ### **Test 3: LiDAR System Test**
 ```bash
 # Connect LiDAR and test (adjust device path as needed)
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 
 # Start LiDAR driver (adjust command based on Unitree documentation)
 ros2 launch unitree_lidar_ros2 radar.launch.py
@@ -425,10 +425,10 @@ ls -la *.pcd
 #### **ROS Import Errors**
 ```bash
 # Ensure ROS environment is sourced
-source /opt/ros/humble/setup.bash
+source /opt/ros/jazzy/setup.bash
 
 # Check Python path
-export PYTHONPATH=$PYTHONPATH:/opt/ros/humble/lib/python3.10/site-packages
+export PYTHONPATH=$PYTHONPATH:/opt/ros/jazzy/lib/python3.12/site-packages
 ```
 
 #### **Camera Not Detected**

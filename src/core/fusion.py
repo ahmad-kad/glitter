@@ -11,7 +11,14 @@ from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 from std_msgs.msg import Float64
 from geometry_msgs.msg import TransformStamped
 import tf2_ros
-from utils import (
+import sys
+from pathlib import Path
+# Add src to path for imports
+src_path = Path(__file__).parent.parent
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+from utils.utils import (
     TransformUtils,
     PointCloudUtils,
     ColorUtils,
@@ -50,7 +57,7 @@ class LidarCameraFusion(Node):
             self.declare_parameter('extrinsic_rot', [0.0, 0.0, 0.0])
             self.declare_parameter('lidar_topic', L2_DEFAULT_TOPIC)
             self.declare_parameter('geometric_prioritization', False)  # Enable edge/corner prioritization
-            self.declare_parameter('max_points_per_frame', None)  # Limit points per frame
+            self.declare_parameter('max_points_per_frame', 0)  # Limit points per frame (0 = no limit)
             self.declare_parameter('geometric_weight', 0.7)  # Weight for geometric features
         except Exception as e:
             self.logger.error(f"Failed to declare parameters: {e}")

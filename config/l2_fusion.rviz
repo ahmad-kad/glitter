@@ -31,38 +31,38 @@ visualization_manager:
       Name: Fused_PointCloud
       Queue Size: 10
       Selectable: true
-      Size (Pixels): 3
+      Size (Pixels): 5
       Size (m): 0.01
       Style: Points
       Topic: /unilidar/colored_cloud
       Unreliable: false
-      Use Fixed Frame: true
+      Use Fixed Frame: false
       Value: Points
     - Alpha: 0.5
       Class: rviz_default_plugins/PointCloud2
       Color: 255; 255; 255
       Color Transformer: Intensity
-      Decay Time: 0.0
-      Enabled: true
+      Decay Time: 100.0
+      Enabled: false
       Name: Raw_L2_LiDAR
-      Queue Size: 10
+      Queue Size: 5
       Selectable: true
       Size (Pixels): 2
       Size (m): 0.01
       Style: Points
-      Topic: /livox/lidar
+      Topic: /unilidar/cloud
       Unreliable: false
-      Use Fixed Frame: true
+      Use Fixed Frame: false
       Value: Points
     - Class: rviz_default_plugins/Image
-      Enabled: true
+      Enabled: false
       Name: Raw_Camera_Image
       Queue Size: 10
       Topic: /camera/image_raw
       Transport Hint: raw
       Value: Image
     - Class: rviz_default_plugins/TF
-      Enabled: true
+      Enabled: false
       Frame Timeout: 15
       Marker Scale: 0.3
       Name: TF_Frames
@@ -72,24 +72,24 @@ visualization_manager:
       Update Interval: 0.0
       Value: TF
     - Class: rviz_default_plugins/Plot
-      Enabled: true
+      Enabled: false
       Name: Frame_Rate
       Topic: /fusion/performance/frame_rate
       Value: Plot
     - Class: rviz_default_plugins/Plot
-      Enabled: true
+      Enabled: false
       Name: Processing_Time
       Topic: /fusion/performance/processing_time
       Value: Plot
     - Class: rviz_default_plugins/Plot
-      Enabled: true
+      Enabled: false
       Name: Points_Processed
       Topic: /fusion/performance/points_processed
       Value: Plot
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: livox_frame
+    Fixed Frame: unilidar_lidar
     Frame Rate: 30
   Name: root
   Tools:

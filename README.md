@@ -52,8 +52,10 @@ python3 src/core/fusion.py
 # Or use simplified infrastructure
 python3 src/infrastructure/simple_fusion_node.py
 
-# Visualize
+# Visualize (see docs/rviz_guide.md for detailed instructions)
 ros2 run rviz2 rviz2 -d config/l2_fusion.rviz
+# Or use the launch script:
+./scripts/utilities/launch_lidar_rviz.sh
 ```
 
 ## Features
@@ -70,7 +72,7 @@ ros2 run rviz2 rviz2 -d config/l2_fusion.rviz
 
 - **Hardware**: Raspberry Pi 5 (8GB RAM), Unitree L2 LiDAR, Camera
 - **OS**: Ubuntu 24.04 LTS Server (64-bit ARM)
-- **ROS**: ROS 2 Humble Hawksbill
+- **ROS**: ROS 2 Jazzy Jalisco
 - **Python**: 3.10+
 - **Memory**: 4GB+ available RAM
 - **Storage**: 32GB+ free space
@@ -82,14 +84,20 @@ glitter/
 ├── README.md                          # This file
 ├── HARDWARE_SETUP.md                  # Hardware installation guide
 ├── DEVELOPMENT_GUIDE.md               # Development setup
-├── REAL_WORLD_ROADMAP.md              # Feature roadmap
 ├── requirements.txt                   # Python dependencies
 │
-├── scripts/                           # Setup scripts
+├── scripts/                           # Scripts and utilities
 │   ├── setup_ubuntu_24.sh            # Ubuntu + ROS setup
 │   ├── install_camera_drivers.sh     # Camera installation
 │   ├── install_unitree_l2.sh         # LiDAR setup
-│   └── test_hardware.sh              # Hardware validation
+│   ├── test_hardware.sh              # Hardware validation
+│   └── utilities/                    # Utility scripts
+│       ├── launch_lidar_rviz.sh     # Launch LiDAR + RViz
+│       ├── build_lidar_driver.sh     # Build LiDAR driver
+│       ├── verify_pointcloud.sh      # Verify point cloud
+│       ├── accumulate_pointcloud.py  # Point cloud accumulator
+│       ├── save_pointcloud.py        # Save point cloud
+│       └── visualize_with_open3d.py  # Open3D visualization
 │
 ├── src/                               # Source code
 │   ├── core/                         # Core fusion logic
@@ -117,12 +125,15 @@ glitter/
 │
 ├── config/                          # Configuration files
 │   ├── l2_fusion.rviz              # RViz visualization
+│   ├── l2_fusion_simple.rviz       # Simple RViz config
 │   ├── camera_calibration.yaml     # Camera parameters
 │   └── lidar_config.yaml           # LiDAR parameters
 │
 └── docs/                            # Documentation
     ├── project_guide.md            # Technical documentation
-    └── optimization_issues.py      # Performance analysis
+    ├── REAL_WORLD_ROADMAP.md       # Feature roadmap
+    ├── rviz_guide.md               # RViz visualization guide
+    └── troubleshooting.md          # Troubleshooting guide
 ```
 
 ## Testing Strategy
@@ -187,8 +198,10 @@ Expected performance on Raspberry Pi 5:
 
 1. **Hardware Issues**: Check `HARDWARE_SETUP.md`
 2. **Development Setup**: See `DEVELOPMENT_GUIDE.md`
-3. **Performance Issues**: Run `python3 tests/test_infrastructure.py --benchmark`
-4. **Code Architecture**: Read `REAL_WORLD_ROADMAP.md`
+3. **RViz Visualization**: See `docs/rviz_guide.md`
+4. **Troubleshooting**: See `docs/troubleshooting.md`
+5. **Performance Issues**: Run `python3 tests/test_infrastructure.py --benchmark`
+6. **Code Architecture**: Read `docs/REAL_WORLD_ROADMAP.md`
 
 ## License
 

@@ -17,12 +17,12 @@ laspy[lazrs]>=2.5.0
 # onnxruntime>=1.15.0  # For ONNX model inference
 
 # ROS 2 packages (installed via apt, listed for reference)
-# ros-humble-ros-base
-# ros-humble-sensor-msgs
-# ros-humble-sensor-msgs-py
-# ros-humble-cv-bridge
-# ros-humble-tf2-ros
-# ros-humble-message-filters
-# ros-humble-diagnostic-msgs
-# ros-humble-image-transport
-# ros-humble-usb-cam
+# ros-jazzy-ros-base
+# ros-jazzy-sensor-msgs
+# ros-jazzy-sensor-msgs-py
+# ros-jazzy-cv-bridge
+# ros-jazzy-tf2-ros
+# ros-jazzy-message-filters
+# ros-jazzy-diagnostic-msgs
+# ros-jazzy-image-transport
+# ros-jazzy-usb-cam

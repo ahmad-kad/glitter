@@ -164,7 +164,7 @@ For embedded/production deployment, install only essentials:
 
 ```bash
 # Minimal ROS 2 (no desktop tools)
-sudo apt install -y ros-humble-ros-base
+sudo apt install -y ros-jazzy-ros-base
 
 # Core packages only
 pip3 install --break-system-packages numpy opencv-python-headless
