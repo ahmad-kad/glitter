@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>glitter</name>
+  <version>1.0.0</version>
+  <description>LiDAR-Camera Fusion Package for RealSense and Unitree L2</description>
+  <maintainer email="user@glitter.local">glitter</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>tf2_ros</depend>
+  <depend>message_filters</depend>
+  <depend>diagnostic_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package></contents>
+</xai:function_call name="write">
+<parameter name="file_path">/home/kaddo/glitter/setup.py
+
+

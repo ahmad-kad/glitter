@@ -1,0 +1,127 @@
+panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded: true
+      Splitter Ratio: 0.5
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
+    Name: Tool Properties
+  - Class: rviz_common/Views
+    Name: Views
+  - Class: rviz_common/Time
+    Name: Time
+  - Class: rviz_common/Help
+    Name: Help
+
+visualization_manager:
+  Class: ""
+  Displays:
+    # Grid for reference
+    - Alpha: 1.0
+      Class: rviz_default_plugins/Grid
+      Enabled: true
+      Name: Grid
+      Value: true
+
+    # Unitree L2 LiDAR Point Cloud
+    - Alpha: 0.7
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0.0
+      Enabled: true
+      Name: L2_LiDAR_PointCloud
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 2
+      Size (m): 0.01
+      Style: Points
+      Topic: /unilidar/cloud
+      Unreliable: false
+      Use Fixed Frame: false
+      Value: Points
+
+    # RealSense Depth Point Cloud (aligned)
+    - Alpha: 0.8
+      Class: rviz_default_plugins/PointCloud2
+      Color Transformer: RGB8
+      Decay Time: 0.0
+      Enabled: true
+      Name: RealSense_PointCloud
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.01
+      Style: Points
+      Topic: /camera/depth/color/points
+      Unreliable: false
+      Use Fixed Frame: false
+      Value: Points
+
+    # RealSense Color Image
+    - Class: rviz_default_plugins/Image
+      Enabled: false
+      Name: RealSense_Color_Image
+      Queue Size: 10
+      Topic: /camera/color/image_raw
+      Transport Hint: raw
+      Value: Image
+
+    # RealSense Depth Image
+    - Class: rviz_default_plugins/Image
+      Enabled: false
+      Name: RealSense_Depth_Image
+      Queue Size: 10
+      Topic: /camera/depth/image_rect_raw
+      Transport Hint: raw
+      Value: Image
+
+    # TF Frames visualization
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Marker Scale: 0.3
+      Name: TF_Frames
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Update Interval: 0.0
+      Value: TF
+
+    # Camera visualization
+    - Class: rviz_default_plugins/Camera
+      Enabled: false
+      Name: RealSense_Camera
+      Queue Size: 10
+      Topic: /camera/color/camera_info
+      Value: Camera
+
+    # Performance monitoring
+    - Class: rviz_default_plugins/Plot
+      Enabled: false
+      Name: L2_LiDAR_Frequency
+      Topic: /unilidar/cloud
+      Value: Plot
+
+  Enabled: true
+  Global Options:
+    Background Color: 48; 48; 48
+    Fixed Frame: unilidar_lidar
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+  Value: true
+  Views:
+    Class: ""
+    Displays:
+      - Class: rviz_default_plugins/Orbit
+        Name: Current View
+        Value: Orbit (rviz)
+        Yaw: 0.0
+        Pitch: 0.0
+        Distance: 5.0
+        Focal Point: [0, 0, 0]

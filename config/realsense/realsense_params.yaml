@@ -1,0 +1,62 @@
+/camera/camera:
+  ros__parameters:
+    # Device configuration
+    serial_no: ''  # Use first available camera
+    usb_port_id: ''  # Auto-detect
+    device_type: ''  # Auto-detect
+
+    # Color stream configuration
+    enable_color: true
+    color_width: 640
+    color_height: 480
+    color_fps: 30.0
+    color_format: 'RGB8'
+
+    # Depth stream configuration
+    enable_depth: true
+    depth_width: 640
+    depth_height: 480
+    depth_fps: 30.0
+
+    # Infrared streams (for depth computation)
+    enable_infra1: false
+    enable_infra2: false
+
+    # Point cloud configuration
+    enable_pointcloud: true
+    pointcloud_texture_index: 0  # Use color texture
+    ordered_pc: false  # Unordered point cloud for better performance
+
+    # Alignment
+    align_depth: true  # Align depth to color frame
+    align_depth_filter_size: 1
+
+    # Filters
+    enable_decimation_filter: false
+    enable_hdr_merge: false
+    enable_sequence_id_filter: false
+    enable_spatial_filter: false
+    enable_temporal_filter: false
+    enable_hole_filling_filter: false
+
+    # Advanced settings
+    json_file_path: ''  # Use default settings
+
+    # TF frames
+    base_frame_id: 'camera_link'
+    depth_frame_id: 'camera_depth_frame'
+    color_frame_id: 'camera_color_frame'
+    infra1_frame_id: 'camera_infra1_frame'
+    infra2_frame_id: 'camera_infra2_frame'
+    pointcloud_frame_id: 'camera_depth_optical_frame'
+
+    # Performance settings
+    enable_sync: true  # Synchronize color and depth
+    enable_auto_exposure: true
+
+    # Diagnostic settings
+    diagnostics_period: 0.0  # Disable diagnostics for performance
+
+    # QoS settings for ROS2
+    qos_sensor_data: 0  # SYSTEM_DEFAULT
+    qos_history_depth: 5

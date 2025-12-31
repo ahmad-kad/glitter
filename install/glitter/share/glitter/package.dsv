@@ -1,0 +1,12 @@
+source;share/glitter/hook/path.ps1
+source;share/glitter/hook/path.dsv
+source;share/glitter/hook/path.sh
+source;share/glitter/hook/pythonpath.ps1
+source;share/glitter/hook/pythonpath.dsv
+source;share/glitter/hook/pythonpath.sh
+source;share/glitter/hook/pythonscriptspath.ps1
+source;share/glitter/hook/pythonscriptspath.dsv
+source;share/glitter/hook/pythonscriptspath.sh
+source;../../build/glitter/share/glitter/hook/pythonpath_develop.ps1
+source;../../build/glitter/share/glitter/hook/pythonpath_develop.dsv
+source;../../build/glitter/share/glitter/hook/pythonpath_develop.sh
