@@ -1,362 +1,402 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import Image, PointCloud2, PointField
+from sensor_msgs.msg import Image, PointCloud2, PointField, CameraInfo
 from sensor_msgs_py import point_cloud2
 import message_filters
-import numpy as np
-import time
 from cv_bridge import CvBridge
-from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
-from std_msgs.msg import Float64
-from geometry_msgs.msg import TransformStamped
-import tf2_ros
-import sys
-from pathlib import Path
-# Add src to path for imports
-src_path = Path(__file__).parent.parent
-if str(src_path) not in sys.path:
-    sys.path.insert(0, str(src_path))
-
-from utils.utils import (
-    TransformUtils,
-    PointCloudUtils,
-    ColorUtils,
-    LoggingUtils,
-    CameraUtils,
-    L2_DEFAULT_TOPIC,
-    HAS_ROS_NUMPY
-)
-
-# Constants
-FIELDS = [
-    PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
-    PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
-    PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
-    PointField(name='rgb', offset=12, datatype=PointField.FLOAT32, count=1),
-]
+import numpy as np
+import struct
+import json
+import os
+from datetime import datetime
 
 class LidarCameraFusion(Node):
+    """
+    ROS 2 Node for real-time LiDAR-Camera sensor fusion.
+    Located at: /home/durian/glitter/glitter/src/core/fusion.py
+    """
     def __init__(self):
         super().__init__('lidar_camera_fusion')
+        
+        # 1. Parameters & State
+        self.bridge = CvBridge()
+        self.camera_model = None # Will be populated by CameraInfo or estimated from image
+        
+        # Extrinsic Calibration: Transform from LiDAR to Camera Link
+        # Default: LiDAR is 10cm above camera
+        self.declare_parameter('extrinsic_xyz', [0.1, 0.0, 0.0]) # Translation
+        self.declare_parameter('extrinsic_rpy', [0.0, 0.0, 0.0]) # Rotation (radians)
+        
+        # Track if we've warned about missing CameraInfo
+        self._camera_info_warned = False
 
-        # Setup logging with error handling
+        # 2. Subscribers with Approximation Sync
+        # We use a small slop (0.05s) to ensure colors match the motion
+        self.info_sub = self.create_subscription(
+            CameraInfo, 
+            '/camera/camera/color/camera_info', 
+            self.info_callback, 
+            10
+        )
+        
+        self.lidar_sub = message_filters.Subscriber(self, PointCloud2, '/unilidar/cloud')
+        self.image_sub = message_filters.Subscriber(self, Image, '/camera/camera/color/image_raw')
+        
+        # Debug: Track individual message reception
+        self._lidar_count = 0
+        self._image_count = 0
+        
+        # Create individual subscribers for debugging
+        self.debug_lidar_sub = self.create_subscription(
+            PointCloud2, '/unilidar/cloud', 
+            lambda msg: self._debug_lidar_callback(msg), 10
+        )
+        self.debug_image_sub = self.create_subscription(
+            Image, '/camera/camera/color/image_raw',
+            lambda msg: self._debug_image_callback(msg), 10
+        )
+        
+        self.ts = message_filters.ApproximateTimeSynchronizer(
+            [self.lidar_sub, self.image_sub], 
+            queue_size=10, 
+            slop=0.5  # Increased tolerance to 0.5s for better synchronization
+        )
+        self.ts.registerCallback(self.sync_callback)
+        # #region agent log
         try:
-            self.logger = LoggingUtils.setup_logging("fusion.log")
-            self.logger.info("LiDAR-Camera Fusion Node initialized")
-            self.logger.info(f"ROS NumPy available: {HAS_ROS_NUMPY}")
-        except Exception as e:
-            self.get_logger().error(f"Failed to setup logging: {e}")
-            raise
+            log_data = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "E",
+                "location": "fusion.py:__init__:synchronizer_setup",
+                "message": "ApproximateTimeSynchronizer configured",
+                "data": {
+                    "slop_seconds": 0.5,
+                    "queue_size": 10,
+                    "lidar_topic": "/unilidar/cloud",
+                    "image_topic": "/camera/camera/color/image_raw"
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
 
-        # Declare parameters with L2/L1 compatibility
+        # 3. Publisher
+        self.pc_pub = self.create_publisher(PointCloud2, '/unilidar/colored_cloud', 10)
+        
+        self.get_logger().info("Fusion Node Initialized. Will use CameraInfo if available, otherwise estimate from image.")
+
+    def info_callback(self, msg):
+        """Store camera intrinsics from the camera_info topic."""
+        if self.camera_model is None:
+            self.camera_model = np.array(msg.k).reshape(3, 3)
+            self.get_logger().info("Camera Intrinsics (K Matrix) Received and loaded.")
+    
+    def _debug_lidar_callback(self, msg):
+        """Debug callback to verify LiDAR messages are arriving."""
+        # #region agent log
         try:
-            default_intrinsics = CameraUtils.default_pi_camera_matrix()
-            self.declare_parameter('camera_matrix', default_intrinsics.flatten().tolist())
-            self.declare_parameter('extrinsic_trans', [0.0, 0.0, 0.0])
-            self.declare_parameter('extrinsic_rot', [0.0, 0.0, 0.0])
-            self.declare_parameter('lidar_topic', L2_DEFAULT_TOPIC)
-            self.declare_parameter('geometric_prioritization', False)  # Enable edge/corner prioritization
-            self.declare_parameter('max_points_per_frame', 0)  # Limit points per frame (0 = no limit)
-            self.declare_parameter('geometric_weight', 0.7)  # Weight for geometric features
-        except Exception as e:
-            self.logger.error(f"Failed to declare parameters: {e}")
-            raise
-
-        # Setup subscribers with configurable topic
+            log_data = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "B",
+                "location": "fusion.py:_debug_lidar_callback",
+                "message": "LiDAR message received",
+                "data": {
+                    "count": self._lidar_count + 1,
+                    "timestamp_nsec": msg.header.stamp.sec * 1e9 + msg.header.stamp.nanosec,
+                    "point_count": msg.width * msg.height if hasattr(msg, 'width') and hasattr(msg, 'height') else 0
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        self._lidar_count += 1
+        if self._lidar_count % 30 == 0:
+            self.get_logger().info(f"LiDAR messages received: {self._lidar_count}")
+    
+    def _debug_image_callback(self, msg):
+        """Debug callback to verify image messages are arriving."""
+        # #region agent log
         try:
-            lidar_topic = self.get_parameter('lidar_topic').get_parameter_value().string_value
-            self.lidar_sub = message_filters.Subscriber(self, PointCloud2, lidar_topic)
-            self.cam_sub = message_filters.Subscriber(self, Image, '/camera/image_raw')
-            self.ts = message_filters.ApproximateTimeSynchronizer([self.lidar_sub, self.cam_sub], 10, 0.1)
-            self.ts.registerCallback(self.fusion_callback)
-        except Exception as e:
-            self.logger.error(f"Failed to setup subscribers: {e}")
-            raise
+            log_data = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "B",
+                "location": "fusion.py:_debug_image_callback",
+                "message": "Image message received",
+                "data": {
+                    "count": self._image_count + 1,
+                    "timestamp_nsec": msg.header.stamp.sec * 1e9 + msg.header.stamp.nanosec,
+                    "width": msg.width,
+                    "height": msg.height
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        self._image_count += 1
+        if self._image_count % 30 == 0:
+            self.get_logger().info(f"Image messages received: {self._image_count}")
 
-        # Setup publishers
+    def _estimate_camera_model(self, img_width, img_height):
+        """Estimate camera intrinsics from image dimensions if CameraInfo unavailable."""
+        # RealSense D435i typical intrinsics at common resolutions
+        # Using pinhole camera model: fx, fy ≈ focal_length * pixel_size
+        # For RealSense: fx ≈ fy ≈ 0.6 * min(width, height) is a reasonable estimate
+        fx = fy = 0.6 * min(img_width, img_height)
+        cx = img_width / 2.0
+        cy = img_height / 2.0
+        
+        K = np.array([
+            [fx, 0.0, cx],
+            [0.0, fy, cy],
+            [0.0, 0.0, 1.0]
+        ], dtype=np.float32)
+        
+        return K
+
+    def sync_callback(self, lidar_msg, img_msg):
+        """Callback triggered when LiDAR and Image timestamps are synchronized."""
+        # #region agent log
         try:
-            self.pub_colored_cloud = self.create_publisher(PointCloud2, '/unilidar/colored_cloud', 10)
-            self.bridge = CvBridge()
-
-            # Diagnostic and performance publishers
-            self.diag_pub = self.create_publisher(DiagnosticArray, '/diagnostics/fusion', 10)
-            self.frame_rate_pub = self.create_publisher(Float64, '/fusion/performance/frame_rate', 10)
-            self.processing_time_pub = self.create_publisher(Float64, '/fusion/performance/processing_time', 10)
-            self.points_processed_pub = self.create_publisher(Float64, '/fusion/performance/points_processed', 10)
-
-            # TF broadcaster for coordinate frames
-            self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
+            lidar_ts = lidar_msg.header.stamp.sec * 1e9 + lidar_msg.header.stamp.nanosec
+            img_ts = img_msg.header.stamp.sec * 1e9 + img_msg.header.stamp.nanosec
+            ts_diff_ms = abs(lidar_ts - img_ts) / 1e6
+            log_data = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+                "location": "fusion.py:sync_callback:entry",
+                "message": "Sync callback triggered",
+                "data": {
+                    "lidar_timestamp_nsec": lidar_ts,
+                    "image_timestamp_nsec": img_ts,
+                    "timestamp_diff_ms": ts_diff_ms,
+                    "lidar_points": lidar_msg.width * lidar_msg.height if hasattr(lidar_msg, 'width') else 0,
+                    "image_size": f"{img_msg.width}x{img_msg.height}"
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
         except Exception as e:
-            self.logger.error(f"Failed to setup publishers: {e}")
-            raise
+            try:
+                error_log = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "C",
+                    "location": "fusion.py:sync_callback:entry:error",
+                    "message": "Error in sync_callback entry logging",
+                    "data": {"error": str(e)},
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+                with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps(error_log) + "\n")
+            except: pass
+        # #endregion
+        
+        # Start timing for performance monitoring
+        start_time = self.get_clock().now()
 
-        self.frame_count = 0
-        self.total_processing_time = 0.0
-
-        # Performance tracking
-        self.last_frame_time = time.time()
-        self.frame_times = []
-        self.processing_times = []
-
-        self.logger.info("Fusion Node Started. Waiting for synced topics...")
-
-    def get_transform_matrix(self):
-        """Get camera intrinsic and extrinsic transformation matrices.
-
-        Returns:
-            Tuple of (K, RT) where K is 3x3 intrinsics and RT is 4x4 extrinsics
-
-        Raises:
-            RuntimeError: If parameters cannot be retrieved or are invalid
-        """
+        # --- STEP 1: Process Image ---
         try:
-            # Retrieve parameters with validation
-            trans_param = self.get_parameter('extrinsic_trans')
-            rot_param = self.get_parameter('extrinsic_rot')
-            cam_param = self.get_parameter('camera_matrix')
-
-            t = trans_param.get_parameter_value().double_array_value
-            r = rot_param.get_parameter_value().double_array_value
-            k_flat = cam_param.get_parameter_value().double_array_value
-
-            # Validate parameter lengths
-            if len(t) != 3:
-                raise ValueError(f"extrinsic_trans must have 3 elements, got {len(t)}")
-            if len(r) != 3:
-                raise ValueError(f"extrinsic_rot must have 3 elements, got {len(r)}")
-            if len(k_flat) != 9:
-                raise ValueError(f"camera_matrix must have 9 elements, got {len(k_flat)}")
-
-            K = np.array(k_flat).reshape(3, 3)
-            RT = TransformUtils.build_extrinsic_matrix(t, r)
-
-            return K, RT
-
+            cv_img = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
+            h, w = cv_img.shape[:2]
         except Exception as e:
-            self.logger.error(f"Failed to get transform matrices: {e}")
-            raise RuntimeError(f"Parameter retrieval failed: {e}")
-
-    def fusion_callback(self, lidar_msg, img_msg):
-        frame_start_time = time.time()
-        current_time = time.time()
-        self.frame_count += 1
-
-        # Calculate frame rate
-        if self.frame_count > 1:
-            frame_interval = current_time - self.last_frame_time
-            self.frame_times.append(frame_interval)
-            if len(self.frame_times) > 30:  # Keep last 30 frame intervals
-                self.frame_times.pop(0)
-            avg_frame_rate = 1.0 / (sum(self.frame_times) / len(self.frame_times))
-        else:
-            avg_frame_rate = 0.0
-        self.last_frame_time = current_time
-
-        # Performance timing variables
-        timing = {}
-
-        try:
-            # Time image conversion
-            img_convert_start = time.time()
-            cv_image = self.bridge.imgmsg_to_cv2(img_msg, desired_encoding='bgr8')
-            height, width, _ = cv_image.shape
-            timing['image_conversion'] = time.time() - img_convert_start
-        except Exception as e:
-            self.logger.error(f"CV Bridge error: {e}")
+            # #region agent log
+            try:
+                error_log = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "C",
+                    "location": "fusion.py:sync_callback:image_conversion_error",
+                    "message": "Image conversion failed",
+                    "data": {"error": str(e), "error_type": type(e).__name__},
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+                with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps(error_log) + "\n")
+            except: pass
+            # #endregion
+            self.get_logger().error(f"Image conversion error: {e}")
             return
-
-        # Time parameter retrieval
-        param_start = time.time()
-        K, RT = self.get_transform_matrix()
-        timing['parameter_retrieval'] = time.time() - param_start
-
-        # Broadcast TF transform (camera relative to LiDAR)
-        self._broadcast_tf_transform(RT, lidar_msg.header.stamp)
-
-        # Time point cloud extraction
-        pc_extract_start = time.time()
-        points_np, _ = PointCloudUtils.extract_xyz_rgb(lidar_msg, ('x', 'y', 'z'))
-        timing['point_cloud_extraction'] = time.time() - pc_extract_start
-
-        if len(points_np) == 0:
-            return
-
-        # Time coordinate transformations
-        coord_start = time.time()
-        points_hom = PointCloudUtils.to_homogeneous(points_np)
-        points_cam = (RT @ points_hom.T).T
-        timing['coordinate_transform'] = time.time() - coord_start
-
-        # Time depth filtering
-        depth_start = time.time()
-        depth_mask = points_cam[:, 2] > 0.1
-        points_cam = points_cam[depth_mask]
-        points_3d = points_np[depth_mask]
-        timing['depth_filtering'] = time.time() - depth_start
-
-        if len(points_cam) == 0:
-            return
-
-        # Optional geometric prioritization (prioritize edges/corners)
-        geom_start = time.time()
-        try:
-            geometric_prioritization = self.get_parameter('geometric_prioritization').get_parameter_value().bool_value
-            if geometric_prioritization:
-                max_points = self.get_parameter('max_points_per_frame').get_parameter_value().integer_value
-                geometric_weight = self.get_parameter('geometric_weight').get_parameter_value().double_value
-
-                # Apply geometric prioritization to select most valuable points
-                points_3d = TransformUtils.prioritize_points_by_geometry(
-                    points_3d, cv_image, K, RT,
-                    max_points=max_points if max_points > 0 else None,
-                    geometric_weight=geometric_weight
+        
+        # If CameraInfo not received, estimate from image dimensions
+        if self.camera_model is None:
+            self.camera_model = self._estimate_camera_model(w, h)
+            if not self._camera_info_warned:
+                self.get_logger().warn(
+                    f"CameraInfo not available. Using estimated intrinsics: "
+                    f"fx={self.camera_model[0,0]:.1f}, fy={self.camera_model[1,1]:.1f}, "
+                    f"cx={self.camera_model[0,2]:.1f}, cy={self.camera_model[1,2]:.1f}"
                 )
+                self._camera_info_warned = True
 
-                # Re-project selected points to camera coordinates
-                points_hom_selected = PointCloudUtils.to_homogeneous(points_3d)
-                points_cam = (RT @ points_hom_selected.T).T
-
-                self.logger.debug(f"Geometric prioritization: selected {len(points_3d)} high-value points")
-
-        except Exception as e:
-            self.logger.warning(f"Geometric prioritization failed, using all points: {e}")
-
-        timing['geometric_prioritization'] = time.time() - geom_start
-
-        # Time 2D projection
-        proj_start = time.time()
-        u, v = TransformUtils.project_3d_to_2d(points_cam[:, :3], K, np.eye(4))
-        bounds_mask = (u >= 0) & (u < width) & (v >= 0) & (v < height)
-        u_valid, v_valid = u[bounds_mask], v[bounds_mask]
-        points_final = points_3d[bounds_mask]
-        timing['projection_2d'] = time.time() - proj_start
-
-        # Time color sampling
-        color_start = time.time()
-        colors = cv_image[v_valid.astype(int), u_valid.astype(int)]
-        rgb_float = ColorUtils.pack_rgb(colors)
-        output_data = np.column_stack((points_final, rgb_float))
-        timing['color_sampling'] = time.time() - color_start
-
-        colored_msg = point_cloud2.create_cloud(lidar_msg.header, FIELDS, output_data)
-        self.pub_colored_cloud.publish(colored_msg)
-
-        # Performance tracking
-        total_processing_time = time.time() - frame_start_time
-        self.total_processing_time += total_processing_time
-        self.processing_times.append(total_processing_time)
-        if len(self.processing_times) > 30:  # Keep last 30 processing times
-            self.processing_times.pop(0)
-
-        # Publish performance metrics
-        self.frame_rate_pub.publish(Float64(data=avg_frame_rate))
-        self.processing_time_pub.publish(Float64(data=total_processing_time))
-        self.points_processed_pub.publish(Float64(data=len(points_final)))
-
-        # Publish diagnostic information
-        self._publish_diagnostics(points_np, points_3d, points_final, total_processing_time, avg_frame_rate)
-
-        # Log detailed timing statistics every 30 frames
-        if self.frame_count % 30 == 0:
-            total_timing = sum(timing.values())
-            self.logger.info(f"Pipeline Timing Breakdown (Frame {self.frame_count}):")
-            for stage, duration in timing.items():
-                percentage = (duration / total_timing) * 100
-                self.logger.info(f"  {stage}: {duration:.3f}ms ({percentage:.1f}%)")
-
-        # Log statistics every 30 frames
-        LoggingUtils.log_frame_stats(self.logger, self.frame_count, {
-            "input_points": len(points_np),
-            "visible": len(points_3d),
-            "colored": len(points_final),
-            "total_time_ms": total_processing_time * 1000
-        })
-
-    def _publish_diagnostics(self, input_points: np.ndarray, visible_points: np.ndarray,
-                           colored_points: np.ndarray, processing_time: float, frame_rate: float):
-        """Publish diagnostic information for monitoring."""
+        # --- STEP 2: Extract LiDAR Points (Vectorized) ---
+        # Efficiently read x, y, z fields as a numpy array
         try:
-            # Create diagnostic array
-            diag_array = DiagnosticArray()
-            diag_array.header.stamp = self.get_clock().now().to_msg()
-
-            # Main fusion status
-            fusion_status = DiagnosticStatus()
-            fusion_status.name = "LiDAR-Camera Fusion"
-            fusion_status.hardware_id = "fusion_pipeline"
-
-            # Determine status level
-            if processing_time > 0.1:  # Slow processing
-                fusion_status.level = DiagnosticStatus.WARN
-                fusion_status.message = "Processing time above 100ms threshold"
-            elif len(colored_points) < 100:  # Few visible points
-                fusion_status.level = DiagnosticStatus.WARN
-                fusion_status.message = "Low point count in fused output"
-            elif frame_rate < 5.0:  # Low frame rate
-                fusion_status.level = DiagnosticStatus.WARN
-                fusion_status.message = "Frame rate below 5 Hz"
-            else:
-                fusion_status.level = DiagnosticStatus.OK
-                fusion_status.message = "Fusion operating normally"
-
-            # Add key-value pairs
-            fusion_status.values = [
-                KeyValue(key="frame_count", value=str(self.frame_count)),
-                KeyValue(key="input_points", value=str(len(input_points))),
-                KeyValue(key="visible_points", value=str(len(visible_points))),
-                KeyValue(key="colored_points", value=str(len(colored_points))),
-                KeyValue(key="processing_time_ms", value=f"{processing_time * 1000:.1f}"),
-                KeyValue(key="frame_rate_hz", value=f"{frame_rate:.1f}"),
-                KeyValue(key="point_efficiency", value=f"{len(colored_points) / max(len(input_points), 1) * 100:.1f}%"),
-            ]
-
-            diag_array.status = [fusion_status]
-            self.diag_pub.publish(diag_array)
-
+            # Convert to regular numpy array (not structured array) for matrix operations
+            points_list = list(point_cloud2.read_points(lidar_msg, field_names=("x", "y", "z"), skip_nans=True))
+            points = np.array([list(p) for p in points_list], dtype=np.float32)
+            # #region agent log
+            try:
+                log_data = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "D",
+                    "location": "fusion.py:sync_callback:point_extraction",
+                    "message": "Point extraction completed",
+                    "data": {
+                        "points_count": len(points),
+                        "points_shape": list(points.shape) if points.size > 0 else []
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+                with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
+            if points.size == 0:
+                # #region agent log
+                try:
+                    log_data = {
+                        "sessionId": "debug-session",
+                        "runId": "run1",
+                        "hypothesisId": "D",
+                        "location": "fusion.py:sync_callback:empty_points",
+                        "message": "Empty point cloud detected",
+                        "data": {},
+                        "timestamp": int(datetime.now().timestamp() * 1000)
+                    }
+                    with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                        f.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
+                return
         except Exception as e:
-            self.logger.warning(f"Failed to publish diagnostics: {e}")
+            # #region agent log
+            try:
+                error_log = {
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "C",
+                    "location": "fusion.py:sync_callback:point_extraction_error",
+                    "message": "Point extraction failed",
+                    "data": {"error": str(e), "error_type": type(e).__name__},
+                    "timestamp": int(datetime.now().timestamp() * 1000)
+                }
+                with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                    f.write(json.dumps(error_log) + "\n")
+            except: pass
+            # #endregion
+            self.get_logger().error(f"Point extraction error: {e}")
+            return
 
-    def _broadcast_tf_transform(self, RT: np.ndarray, timestamp):
-        """Broadcast TF transform from LiDAR to camera frame."""
+        # --- STEP 3: Transform LiDAR to Camera Optical Frame ---
+        # Unitree L2: Z is UP, X is FORWARD.
+        # RealSense Optical: Z is FORWARD, Y is DOWN, X is RIGHT.
+        R_align = np.array([
+            [0, -1,  0], # New X is -Old Y
+            [0,  0, -1], # New Y is -Old Z
+            [1,  0,  0]  # New Z is  Old X (Forward)
+        ])
+        
+        # Apply transformation to the point cloud
+        pts_cam = points @ R_align.T 
+        
+        # --- STEP 4: Projection ---
+        # Filter points behind camera (Z < 0.1m)
+        mask = pts_cam[:, 2] > 0.1
+        pts_cam = pts_cam[mask]
+        original_pts = points[mask]
+
+        if pts_cam.size == 0:
+            return
+
+        # Project 3D to 2D image coordinates: [u, v, 1]^T = K * [x, y, z]^T / z
+        u_v = (self.camera_model @ pts_cam.T).T
+        u_v[:, 0] /= u_v[:, 2] # x / z
+        u_v[:, 1] /= u_v[:, 2] # y / z
+        
+        u = u_v[:, 0].astype(int)
+        v = u_v[:, 1].astype(int)
+
+        # --- STEP 5: Boundary Check & Color Sampling ---
+        valid_idx = (u >= 0) & (u < w) & (v >= 0) & (v < h)
+        u, v = u[valid_idx], v[valid_idx]
+        final_pts = original_pts[valid_idx]
+        
+        # Vectorized color sampling from the image
+        colors = cv_img[v, u] 
+
+        # --- STEP 6: Pack into PointCloud2 ---
+        # Pack RGB into a single 32-bit float for ROS PointCloud2 compatibility (RGB8)
+        processed_points = []
+        for i in range(len(final_pts)):
+            b, g, r = colors[i]
+            # Pack 4 bytes (B, G, R, A) into one unsigned integer
+            rgb = struct.unpack('I', struct.pack('BBBB', b, g, r, 255))[0]
+            processed_points.append([final_pts[i][0], final_pts[i][1], final_pts[i][2], rgb])
+
+        # Define fields for the output PointCloud2 message
+        fields = [
+            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
+            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
+            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
+            PointField(name='rgb', offset=12, datatype=PointField.UINT32, count=1),
+        ]
+
+        # Create and publish the message
+        out_msg = point_cloud2.create_cloud(lidar_msg.header, fields, processed_points)
+        self.pc_pub.publish(out_msg)
+
+        # Performance monitoring (log every few seconds)
+        duration = (self.get_clock().now() - start_time).nanoseconds / 1e6
+        # #region agent log
         try:
-            # Extract rotation matrix and translation from 4x4 transform
-            R = RT[:3, :3]
-            t = RT[:3, 3]
+            log_data = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A",
+                "location": "fusion.py:sync_callback:exit",
+                "message": "Sync callback completed successfully",
+                "data": {
+                    "processed_points": len(processed_points),
+                    "duration_ms": duration,
+                    "original_points": len(points),
+                    "valid_projected": len(final_pts)
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000)
+            }
+            with open("/home/durian/glitter/glitter/.cursor/debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        if self.frame_count_mod(30):
+            self.get_logger().info(f"Fusion Success: {len(processed_points)} points colored in {duration:.2f}ms")
 
-            # Convert rotation matrix to quaternion
-            # This is a simplified conversion - in production you'd want a more robust method
-            qw = np.sqrt(1 + R[0,0] + R[1,1] + R[2,2]) / 2
-            qx = (R[2,1] - R[1,2]) / (4 * qw)
-            qy = (R[0,2] - R[2,0]) / (4 * qw)
-            qz = (R[1,0] - R[0,1]) / (4 * qw)
-
-            # Create transform message
-            transform = TransformStamped()
-            transform.header.stamp = timestamp
-            transform.header.frame_id = "livox_frame"  # LiDAR frame
-            transform.child_frame_id = "camera_frame"  # Camera frame
-
-            transform.transform.translation.x = float(t[0])
-            transform.transform.translation.y = float(t[1])
-            transform.transform.translation.z = float(t[2])
-
-            transform.transform.rotation.x = float(qx)
-            transform.transform.rotation.y = float(qy)
-            transform.transform.rotation.z = float(qz)
-            transform.transform.rotation.w = float(qw)
-
-            self.tf_broadcaster.sendTransform(transform)
-
-        except Exception as e:
-            self.logger.warning(f"Failed to broadcast TF transform: {e}")
+    def frame_count_mod(self, n):
+        # Simple helper for periodic logging
+        return self.get_clock().now().nanoseconds % n == 0
 
 def main(args=None):
     rclpy.init(args=args)
     node = LidarCameraFusion()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("Fusion node stopped by user.")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

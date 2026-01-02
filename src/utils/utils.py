@@ -307,6 +307,17 @@ class TransformUtils:
         z_coords = uv_hom[:, 2]
         valid_z = np.abs(z_coords) > 1e-8  # Slightly more tolerant threshold
 
+        # Initialize output arrays
+        u = np.zeros(len(points_3d), dtype=np.int32)
+        v = np.zeros(len(points_3d), dtype=np.int32)
+
+        # Only compute for valid z coordinates
+        if np.any(valid_z):
+            u[valid_z] = (uv_hom[valid_z, 0] / z_coords[valid_z]).astype(np.int32)
+            v[valid_z] = (uv_hom[valid_z, 1] / z_coords[valid_z]).astype(np.int32)
+
+        return u, v
+
     @staticmethod
     def apply_geometric_prioritization(points_3d: np.ndarray,
                                      image: np.ndarray,
